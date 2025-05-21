@@ -1,4 +1,5 @@
 import { Configuration, OpenAIApi } from 'openai';
+import { getSystemPrompt, getUserPromptTemplate, getFeedbackPromptTemplate } from './systemPrompt';
 
 // 환경 변수에서 API 키를 가져오거나 설정에서 관리
 const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY || '';
@@ -54,37 +55,26 @@ export const generateEventPlan = async (eventData: EventPlanningInput): Promise<
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
     }
 
-    // 프롬프트 구성
-    const prompt = `
-      다음 정보를 바탕으로 SNS 이벤트 기획안을 생성해주세요:
-      
-      제품/서비스 이름: ${eventData.productName}
-      카테고리: ${eventData.productCategory}
-      특징 및 장점: ${eventData.productFeatures}
-      타겟 고객층: ${eventData.targetAudience}
-      마케팅 목표: ${eventData.marketingGoals.join(', ')}
-      KPI 지표: ${eventData.kpiMetrics.join(', ')}
-      예산: ${eventData.budget}원
-      플랫폼: ${eventData.platforms.join(', ')}
-      이벤트 기간: ${eventData.eventDuration}
-      ${eventData.prizes ? `경품 구성: ${eventData.prizes}` : ''}
-      ${eventData.brandTone ? `브랜드 톤앤매너: ${eventData.brandTone}` : ''}
-      ${eventData.additionalInfo ? `추가 정보: ${eventData.additionalInfo}` : ''}
-      ${eventData.referenceLinks ? `참고 링크: ${eventData.referenceLinks}` : ''}
-      
-      다음 형식으로 응답해주세요:
-      1. 이벤트 제목
-      2. 이벤트 컨셉 (2~3문장)
-      3. 이벤트 유형 (예: UGC 챌린지, 해시태그 이벤트 등)
-      4. 플랫폼
-      5. 기간
-      6. 타겟 오디언스
-      7. 실행 단계 (5단계 이상)
-      8. 추천 해시태그 (4개 이상)
-      9. 예상 성과 (4가지 이상)
-      10. 경품 구성 추천
-      11. SNS 포스팅 예시 (1개)
-    `;
+    // 사용자 프롬프트 템플릿 가져오기
+    let promptTemplate = getUserPromptTemplate();
+    
+    // 변수 치환
+    let prompt = promptTemplate
+      .replace('{productName}', eventData.productName)
+      .replace('{productCategory}', eventData.productCategory)
+      .replace('{productFeatures}', eventData.productFeatures)
+      .replace('{targetAudience}', eventData.targetAudience)
+      .replace('{marketingGoals}', eventData.marketingGoals.join(', '))
+      .replace('{kpiMetrics}', eventData.kpiMetrics.join(', '))
+      .replace('{budget}', eventData.budget)
+      .replace('{platforms}', eventData.platforms.join(', '))
+      .replace('{eventDuration}', eventData.eventDuration);
+    
+    // 선택적 필드 처리
+    prompt = prompt.replace('{prizes}', eventData.prizes ? `경품 구성: ${eventData.prizes}` : '');
+    prompt = prompt.replace('{brandTone}', eventData.brandTone ? `브랜드 톤앤매너: ${eventData.brandTone}` : '');
+    prompt = prompt.replace('{additionalInfo}', eventData.additionalInfo ? `추가 정보: ${eventData.additionalInfo}` : '');
+    prompt = prompt.replace('{referenceLinks}', eventData.referenceLinks ? `참고 링크: ${eventData.referenceLinks}` : '');
 
     console.log("=== OpenAI API 요청 정보 ===");
     console.log("입력 데이터:", JSON.stringify(eventData, null, 2));
@@ -141,7 +131,7 @@ export const generateEventPlan = async (eventData: EventPlanningInput): Promise<
     const response = await openai.createChatCompletion({
       model: "gpt-4.1",
       messages: [
-        { role: "system", content: "당신은 전문적인 SNS 마케팅 이벤트 기획자입니다." },
+        { role: "system", content: getSystemPrompt() },
         { role: "user", content: prompt }
       ],
       temperature: 0.7,
@@ -186,42 +176,23 @@ export const refineEventPlan = async (
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
     }
 
-    // 프롬프트 구성
-    const prompt = `
-      다음은 기존 SNS 이벤트 기획안입니다:
-      
-      제목: ${eventData.eventTitle}
-      컨셉: ${eventData.eventConcept}
-      유형: ${eventData.eventType}
-      플랫폼: ${eventData.platforms.join(', ')}
-      기간: ${eventData.duration}
-      타겟 오디언스: ${eventData.targetAudience}
-      실행 단계: 
-      ${eventData.executionSteps.join('\n')}
-      해시태그: ${eventData.hashtags.join(', ')}
-      예상 성과: 
-      ${eventData.expectedResults.join('\n')}
-      경품 구성: 
-      ${eventData.suggestedPrizes.join('\n')}
-      SNS 포스팅 예시: 
-      ${eventData.samplePost}
-      
-      사용자가 다음과 같은 피드백을 주었습니다:
-      "${feedback}"
-      
-      이 피드백을 반영하여 기획안을 수정하고 다음 형식으로 응답해주세요:
-      1. 이벤트 제목
-      2. 이벤트 컨셉 (2~3문장)
-      3. 이벤트 유형 (예: UGC 챌린지, 해시태그 이벤트 등)
-      4. 플랫폼
-      5. 기간
-      6. 타겟 오디언스
-      7. 실행 단계 (5단계 이상)
-      8. 추천 해시태그 (4개 이상)
-      9. 예상 성과 (4가지 이상)
-      10. 경품 구성 추천
-      11. SNS 포스팅 예시 (1개)
-    `;
+    // 피드백 프롬프트 템플릿 가져오기
+    let promptTemplate = getFeedbackPromptTemplate();
+    
+    // 변수 치환
+    let prompt = promptTemplate
+      .replace('{eventTitle}', eventData.eventTitle)
+      .replace('{eventConcept}', eventData.eventConcept)
+      .replace('{eventType}', eventData.eventType)
+      .replace('{platforms}', eventData.platforms.join(', '))
+      .replace('{duration}', eventData.duration)
+      .replace('{targetAudience}', eventData.targetAudience)
+      .replace('{executionSteps}', eventData.executionSteps.join('\n'))
+      .replace('{hashtags}', eventData.hashtags.join(', '))
+      .replace('{expectedResults}', eventData.expectedResults.join('\n'))
+      .replace('{suggestedPrizes}', eventData.suggestedPrizes.join('\n'))
+      .replace('{samplePost}', eventData.samplePost)
+      .replace('{feedback}', feedback);
 
     // API 키가 없는 경우 목업 데이터 반환 (개발 모드)
     if (OPENAI_API_KEY === 'your_openai_api_key_here' || OPENAI_API_KEY === '') {
@@ -238,7 +209,7 @@ export const refineEventPlan = async (
     const response = await openai.createChatCompletion({
       model: "gpt-4.1",
       messages: [
-        { role: "system", content: "당신은 전문적인 SNS 마케팅 이벤트 기획자입니다." },
+        { role: "system", content: getSystemPrompt() },
         { role: "user", content: prompt }
       ],
       temperature: 0.7,

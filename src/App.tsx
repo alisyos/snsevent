@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import IntegratedEventPage from './pages/IntegratedEventPage';
+import AdminPage from './pages/AdminPage';
+import { initializeSystemPrompt } from './services/systemPrompt';
 
 // 앱 테마 설정
 const theme = createTheme({
@@ -100,6 +102,12 @@ const theme = createTheme({
 });
 
 function App() {
+  // 앱 시작 시 시스템 프롬프트 초기화
+  useEffect(() => {
+    initializeSystemPrompt();
+    console.log('App: 시스템 프롬프트 초기화 완료');
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -109,6 +117,7 @@ function App() {
           <Routes>
             <Route path="/" element={<IntegratedEventPage />} />
             <Route path="/integrated" element={<IntegratedEventPage />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

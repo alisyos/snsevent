@@ -5,7 +5,9 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
+import Button from '@mui/material/Button';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 const Header: React.FC = () => {
   return (
@@ -34,6 +36,23 @@ const Header: React.FC = () => {
               AI 기반 SNS 이벤트 기획
             </RouterLink>
           </Typography>
+          
+          <Button 
+            component={RouterLink} 
+            to="/admin" 
+            color="inherit" 
+            startIcon={<AdminPanelSettingsIcon />}
+            sx={{ 
+              backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+              '&:hover': { 
+                backgroundColor: 'rgba(255, 255, 255, 0.2)' 
+              },
+              borderRadius: 2,
+              px: 2
+            }}
+          >
+            관리자
+          </Button>
         </Toolbar>
       </Container>
     </AppBar>
