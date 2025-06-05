@@ -26,16 +26,13 @@ import {
   getPromptHistory,
   savePromptToHistory,
   deletePromptHistory,
-  getUserPromptTemplate,
-  saveUserPromptTemplate,
-  resetUserPromptTemplate,
-  getUserPromptHistory,
-  saveUserPromptToHistory,
-  deleteUserPromptHistory,
+
   PromptHistory,
   getFeedbackPromptTemplate,
   saveFeedbackPromptTemplate,
-  resetFeedbackPromptTemplate
+  resetFeedbackPromptTemplate,
+  forceUpdateAllPrompts,
+  checkAndUpdatePromptVersion
 } from '../services/systemPrompt';
 
 // 스타일 컴포넌트
@@ -114,11 +111,7 @@ const AdminPage: React.FC = () => {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [description, setDescription] = useState('');
   
-  // 상태 관리 - 사용자 프롬프트 템플릿
-  const [currentUserPrompt, setCurrentUserPrompt] = useState('');
-  const [editedUserPrompt, setEditedUserPrompt] = useState('');
-  const [userPromptHistory, setUserPromptHistory] = useState<PromptHistory[]>([]);
-  const [userPromptDescription, setUserPromptDescription] = useState('');
+  // 상태 관리 - 사용자 프롬프트 관련 제거됨 (시스템 프롬프트로 통합)
   
   // 상태 관리 - 피드백 프롬프트 템플릿
   const [currentFeedbackPrompt, setCurrentFeedbackPrompt] = useState('');
@@ -152,11 +145,7 @@ const AdminPage: React.FC = () => {
         setCurrentPrompt(prompt);
         setEditedPrompt(prompt);
         
-        // 사용자 프롬프트 템플릿 로드
-        const userPrompt = getUserPromptTemplate();
-        console.log("관리자 페이지: 불러온 사용자 프롬프트 템플릿", userPrompt);
-        setCurrentUserPrompt(userPrompt);
-        setEditedUserPrompt(userPrompt);
+        // 사용자 프롬프트는 이제 시스템 프롬프트에 통합됨
         
         // 피드백 프롬프트 템플릿 로드
         const feedbackPrompt = getFeedbackPromptTemplate();
@@ -182,8 +171,29 @@ const AdminPage: React.FC = () => {
     const systemHistory = getPromptHistory();
     setPromptHistory(systemHistory);
     
-    const userTemplateHistory = getUserPromptHistory();
-    setUserPromptHistory(userTemplateHistory);
+    // 사용자 프롬프트 히스토리는 더 이상 사용하지 않음
+  };
+
+  // 모든 프롬프트를 강제로 업데이트
+  const handleForceUpdateAllPrompts = () => {
+    try {
+      forceUpdateAllPrompts();
+      
+      // UI 업데이트
+      const newSystemPrompt = getSystemPrompt();
+      const newFeedbackPrompt = getFeedbackPromptTemplate();
+      
+      setCurrentPrompt(newSystemPrompt);
+      setEditedPrompt(newSystemPrompt);
+      setCurrentFeedbackPrompt(newFeedbackPrompt);
+      setEditedFeedbackPrompt(newFeedbackPrompt);
+      
+      loadHistory();
+      showSnackbar('모든 프롬프트가 최신 버전으로 업데이트되었습니다!', 'success');
+    } catch (error) {
+      console.error('프롬프트 강제 업데이트 중 오류:', error);
+      showSnackbar('프롬프트 업데이트 중 오류가 발생했습니다.', 'error');
+    }
   };
 
   // 탭 변경 핸들러
@@ -205,19 +215,7 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  // 사용자 프롬프트 템플릿 저장
-  const handleSaveUserPrompt = () => {
-    try {
-      saveUserPromptTemplate(editedUserPrompt);
-      saveUserPromptToHistory(editedUserPrompt, userPromptDescription);
-      setCurrentUserPrompt(editedUserPrompt);
-      setUserPromptDescription('');
-      loadHistory();
-      showSnackbar('사용자 프롬프트 템플릿이 성공적으로 저장되었습니다!', 'success');
-    } catch (error) {
-      showSnackbar('저장 중 오류가 발생했습니다.', 'error');
-    }
-  };
+  // 사용자 프롬프트 관련 함수 제거됨 (시스템 프롬프트로 통합)
 
   // 피드백 프롬프트 템플릿 저장
   const handleSaveFeedbackPrompt = () => {
@@ -242,13 +240,6 @@ const AdminPage: React.FC = () => {
         setEditedPrompt(defaultPrompt);
         savePromptToHistory(defaultPrompt, '기본 프롬프트로 초기화');
         showSnackbar('시스템 프롬프트가 초기화되었습니다.', 'info');
-      } else if (activeTab === 1) {
-        resetUserPromptTemplate();
-        const defaultUserPrompt = getUserPromptTemplate();
-        setCurrentUserPrompt(defaultUserPrompt);
-        setEditedUserPrompt(defaultUserPrompt);
-        saveUserPromptToHistory(defaultUserPrompt, '기본 템플릿으로 초기화');
-        showSnackbar('사용자 프롬프트 템플릿이 초기화되었습니다.', 'info');
       } else {
         resetFeedbackPromptTemplate();
         const defaultFeedbackPrompt = getFeedbackPromptTemplate();
@@ -267,16 +258,17 @@ const AdminPage: React.FC = () => {
     if (historyType === 'system') {
       setEditedPrompt(item.prompt);
     } else {
-      setEditedUserPrompt(item.prompt);
+      // 피드백 프롬프트인 경우
+      setEditedFeedbackPrompt(item.prompt);
     }
     setOpenHistoryDialog(false);
     showSnackbar('히스토리에서 프롬프트가 복원되었습니다. 저장하려면 저장 버튼을 클릭하세요.', 'info');
   };
 
   // 히스토리 상세 보기
-  const handleViewHistory = (item: PromptHistory, type: 'system' | 'user') => {
+  const handleViewHistory = (item: PromptHistory) => {
     setSelectedHistoryItem(item);
-    setHistoryType(type);
+    setHistoryType('system');
     setOpenHistoryDialog(true);
   };
 
@@ -284,11 +276,8 @@ const AdminPage: React.FC = () => {
   const handleDeleteHistory = () => {
     if (selectedHistoryId) {
       try {
-        if (historyType === 'system') {
-          deletePromptHistory(selectedHistoryId);
-        } else {
-          deleteUserPromptHistory(selectedHistoryId);
-        }
+        // 시스템 프롬프트 히스토리만 지원
+        deletePromptHistory(selectedHistoryId);
         loadHistory();
         setOpenDeleteDialog(false);
         setSelectedHistoryId(null);
@@ -309,7 +298,7 @@ const AdminPage: React.FC = () => {
   // 히스토리 버튼 클릭 핸들러
   const handleOpenHistory = () => {
     setSelectedHistoryItem(null);
-    setHistoryType(activeTab === 0 ? 'system' : 'user');
+    setHistoryType('system'); // 시스템 프롬프트 히스토리만 사용
     setOpenHistoryDialog(true);
   };
 
@@ -319,14 +308,12 @@ const AdminPage: React.FC = () => {
       <StyledPaper elevation={3}>
         <Typography variant="h6" gutterBottom color="primary">
           <HistoryIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          {activeTab === 0 ? '시스템 프롬프트 히스토리' : 
-           activeTab === 1 ? '사용자 프롬프트 템플릿 히스토리' : 
-           '피드백 프롬프트 템플릿 히스토리'}
+          {activeTab === 0 ? '시스템 프롬프트 히스토리' : '피드백 프롬프트 템플릿 히스토리'}
         </Typography>
         
         {activeTab === 0 
           ? renderHistoryList(promptHistory, 'system')
-          : activeTab === 1 ? renderHistoryList(userPromptHistory, 'user') : renderHistoryList(userPromptHistory, 'user')
+          : renderHistoryList(promptHistory, 'system') // 피드백 프롬프트도 시스템 히스토리 사용
         }
       </StyledPaper>
     );
@@ -379,12 +366,12 @@ const AdminPage: React.FC = () => {
                 </IconButton>
               </Tooltip>
               <Tooltip title="상세보기">
-                <IconButton 
-                  size="small"
-                  onClick={() => handleViewHistory(item, type)}
-                >
-                  <InfoIcon fontSize="small" />
-                </IconButton>
+                                  <IconButton 
+                    size="small"
+                    onClick={() => handleViewHistory(item)}
+                  >
+                    <InfoIcon fontSize="small" />
+                  </IconButton>
               </Tooltip>
               <Tooltip title="삭제">
                 <IconButton 
@@ -416,6 +403,40 @@ const AdminPage: React.FC = () => {
       <Typography variant="subtitle1" color="text.secondary" paragraph>
         AI가 응답을 생성할 때 사용하는 프롬프트를 관리합니다. 좋은 프롬프트 설정은 더 정확하고 품질 높은 이벤트 기획안을 생성하는 데 도움이 됩니다.
       </Typography>
+
+      {/* 강제 업데이트 버튼 */}
+      <Box sx={{ mb: 3, p: 2, backgroundColor: alpha('#ff9800', 0.1), borderRadius: 2, border: '1px solid #ff9800' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="subtitle1" fontWeight="bold" color="warning.main">
+              📢 프롬프트 업데이트 알림
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              새로운 단순화된 프롬프트 구조가 적용되었습니다. 아래 버튼을 클릭하여 최신 버전으로 업데이트하세요.
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={handleForceUpdateAllPrompts}
+            startIcon={<AutoFixHighIcon />}
+            sx={{
+              borderRadius: '20px',
+              px: 3,
+              ml: 2,
+              boxShadow: '0 4px 8px rgba(237, 108, 2, 0.3)',
+              '&:hover': {
+                boxShadow: '0 6px 12px rgba(237, 108, 2, 0.4)',
+              }
+            }}
+          >
+            강제 업데이트
+          </Button>
+        </Box>
+        <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+          * 기존에 저장된 프롬프트는 히스토리에 백업되며, 최신 기본값으로 덮어쓰여집니다.
+        </Typography>
+      </Box>
       
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
@@ -437,16 +458,10 @@ const AdminPage: React.FC = () => {
                 {...a11yProps(0)} 
               />
               <Tab 
-                label="사용자 프롬프트 템플릿" 
-                icon={<CodeIcon />} 
-                iconPosition="start"
-                {...a11yProps(1)} 
-              />
-              <Tab 
                 label="피드백 프롬프트 템플릿" 
                 icon={<AutoFixHighIcon />} 
                 iconPosition="start"
-                {...a11yProps(2)} 
+                {...a11yProps(1)} 
               />
             </Tabs>
           </Box>
@@ -576,130 +591,8 @@ const AdminPage: React.FC = () => {
                 </StyledPaper>
               </TabPanel>
               
-              {/* 사용자 프롬프트 템플릿 탭 패널 */}
-              <TabPanel value={activeTab} index={1}>
-                <StyledPaper elevation={3}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6" fontWeight="medium" color="primary">
-                      사용자 프롬프트 템플릿 편집
-                    </Typography>
-                    <Chip
-                      icon={<CodeIcon />}
-                      label="템플릿 편집"
-                      color="secondary"
-                      variant="outlined"
-                      size="small"
-                    />
-                  </Box>
-                  
-                  <Box sx={{ 
-                    p: 2, 
-                    mb: 2, 
-                    borderRadius: 1,
-                    backgroundColor: (theme) => alpha(theme.palette.warning.light, 0.1),
-                    border: '1px solid',
-                    borderColor: 'warning.light'
-                  }}>
-                    <Typography variant="body2" color="text.secondary">
-                      <InfoIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5, color: 'warning.main' }} />
-                      <strong>사용자 프롬프트 템플릿:</strong> 이 템플릿은 사용자 입력 데이터와 결합되어 AI에게 전달되는 실제 프롬프트를 생성합니다.
-                    </Typography>
-                  </Box>
-                  
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={12}
-                    variant="outlined"
-                    label="사용자 프롬프트 템플릿"
-                    value={editedUserPrompt}
-                    onChange={(e) => setEditedUserPrompt(e.target.value)}
-                    placeholder="사용자 프롬프트 템플릿을 입력하세요"
-                    sx={{ mb: 2 }}
-                  />
-                  
-                  <TextField
-                    fullWidth
-                    variant="outlined"
-                    label="변경 설명 (선택사항)"
-                    value={userPromptDescription}
-                    onChange={(e) => setUserPromptDescription(e.target.value)}
-                    placeholder="이 변경의 목적이나 이유를 간략히 설명하세요"
-                    sx={{ mb: 2 }}
-                  />
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Box>
-                      <Button
-                        variant="outlined"
-                        color="secondary"
-                        startIcon={<ReplayIcon />}
-                        onClick={() => setOpenResetDialog(true)}
-                        sx={{ mr: 1 }}
-                      >
-                        초기화
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        startIcon={<HistoryIcon />}
-                        onClick={handleOpenHistory}
-                      >
-                        히스토리
-                      </Button>
-                    </Box>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<SaveIcon />}
-                      onClick={handleSaveUserPrompt}
-                      disabled={!editedUserPrompt.trim() || editedUserPrompt === currentUserPrompt}
-                    >
-                      저장
-                    </Button>
-                  </Box>
-                </StyledPaper>
-                
-                <StyledPaper elevation={3}>
-                  <Typography variant="h6" color="primary" gutterBottom>
-                    템플릿 변수 사용 가이드
-                  </Typography>
-                  <Typography variant="body2" paragraph>
-                    템플릿에서 사용할 수 있는 변수들:
-                  </Typography>
-                  <List disablePadding>
-                    <ListItem>
-                      <ListItemText
-                        primary="{productName}, {productCategory}, {productFeatures}"
-                        secondary="제품 또는 서비스 관련 정보가 삽입됩니다."
-                      />
-                    </ListItem>
-                    <Divider component="li" />
-                    <ListItem>
-                      <ListItemText
-                        primary="{targetAudience}, {marketingGoals}, {kpiMetrics}"
-                        secondary="마케팅 목표와 대상 고객층 정보가 삽입됩니다."
-                      />
-                    </ListItem>
-                    <Divider component="li" />
-                    <ListItem>
-                      <ListItemText
-                        primary="{budget}, {platforms}, {eventDuration}"
-                        secondary="이벤트 실행 조건 정보가 삽입됩니다."
-                      />
-                    </ListItem>
-                    <Divider component="li" />
-                    <ListItem>
-                      <ListItemText
-                        primary="{prizes}, {brandTone}, {additionalInfo}, {referenceLinks}"
-                        secondary="추가 정보 필드들이 삽입됩니다. 이 필드들은 사용자가 입력하지 않으면 빈 문자열로 대체됩니다."
-                      />
-                    </ListItem>
-                  </List>
-                </StyledPaper>
-              </TabPanel>
-              
               {/* 피드백 프롬프트 템플릿 탭 패널 */}
-              <TabPanel value={activeTab} index={2}>
+              <TabPanel value={activeTab} index={1}>
                 <StyledPaper elevation={3}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="h6" fontWeight="medium" color="primary">
@@ -784,32 +677,22 @@ const AdminPage: React.FC = () => {
                   <List disablePadding>
                     <ListItem>
                       <ListItemText
-                        primary="{eventTitle}, {eventConcept}, {eventType}"
-                        secondary="기존에 생성된 이벤트의 제목, 컨셉, 유형 정보가 삽입됩니다."
+                        primary="{existingEventPlan}"
+                        secondary="기존에 생성된 이벤트 기획안의 전체 JSON 구조가 삽입됩니다."
                       />
                     </ListItem>
                     <Divider component="li" />
                     <ListItem>
                       <ListItemText
-                        primary="{platforms}, {duration}, {targetAudience}"
-                        secondary="기존에 생성된 이벤트의 플랫폼, 기간, 타겟 오디언스 정보가 삽입됩니다."
-                      />
-                    </ListItem>
-                    <Divider component="li" />
-                    <ListItem>
-                      <ListItemText
-                        primary="{executionSteps}, {hashtags}, {expectedResults}, {suggestedPrizes}"
-                        secondary="기존에 생성된 이벤트의 실행 단계, 해시태그, 예상 성과, 경품 구성 정보가 삽입됩니다."
-                      />
-                    </ListItem>
-                    <Divider component="li" />
-                    <ListItem>
-                      <ListItemText
-                        primary="{samplePost}, {feedback}"
-                        secondary="기존에 생성된 이벤트의 샘플 포스트와 사용자가 입력한 피드백이 삽입됩니다."
+                        primary="{feedback}"
+                        secondary="사용자가 입력한 피드백 내용이 삽입됩니다."
                       />
                     </ListItem>
                   </List>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                    <strong>참고:</strong> 새로운 구조에서는 기존 이벤트 기획안이 JSON 형태로 전달되며, 
+                    피드백을 반영하여 동일한 JSON 구조로 수정된 결과를 출력해야 합니다.
+                  </Typography>
                 </StyledPaper>
               </TabPanel>
             </Grid>
@@ -828,14 +711,11 @@ const AdminPage: React.FC = () => {
         onClose={() => setOpenResetDialog(false)}
       >
         <DialogTitle>
-          {activeTab === 0 ? '시스템 프롬프트 초기화' : 
-           activeTab === 1 ? '사용자 프롬프트 템플릿 초기화' : 
-           '피드백 프롬프트 템플릿 초기화'}
+          {activeTab === 0 ? '시스템 프롬프트 초기화' : '피드백 프롬프트 템플릿 초기화'}
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             {activeTab === 0 ? '시스템 프롬프트를 기본값으로 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.' :
-             activeTab === 1 ? '사용자 프롬프트 템플릿을 기본값으로 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.' :
              '피드백 프롬프트 템플릿을 기본값으로 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.'}
           </DialogContentText>
         </DialogContent>
@@ -875,8 +755,8 @@ const AdminPage: React.FC = () => {
       >
         <DialogTitle>
           {selectedHistoryItem 
-            ? (historyType === 'system' ? '시스템 프롬프트 히스토리 상세' : '사용자 프롬프트 템플릿 히스토리 상세')
-            : (historyType === 'system' ? '시스템 프롬프트 히스토리' : '사용자 프롬프트 템플릿 히스토리')
+            ? '프롬프트 히스토리 상세'
+            : '프롬프트 히스토리'
           }
         </DialogTitle>
         <DialogContent>
@@ -891,7 +771,7 @@ const AdminPage: React.FC = () => {
               <TextField
                 fullWidth
                 multiline
-                rows={historyType === 'system' ? 6 : 12}
+                rows={6}
                 variant="outlined"
                 value={selectedHistoryItem.prompt}
                 InputProps={{
@@ -911,7 +791,7 @@ const AdminPage: React.FC = () => {
             </Box>
           ) : (
             <List>
-              {(historyType === 'system' ? promptHistory : userPromptHistory).map((item) => (
+              {promptHistory.map((item: PromptHistory) => (
                 <PromptCard key={item.id}>
                   <CardContent>
                     <Typography variant="subtitle2" color="primary">
@@ -934,7 +814,7 @@ const AdminPage: React.FC = () => {
                     </Button>
                     <Button 
                       size="small" 
-                      onClick={() => handleViewHistory(item, historyType)}
+                      onClick={() => handleViewHistory(item)}
                       startIcon={<InfoIcon />}
                     >
                       상세보기

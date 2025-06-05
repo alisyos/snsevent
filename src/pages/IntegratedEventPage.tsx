@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Container, Grid, Box, Paper, Typography, Divider,
-  Stepper, Step, StepLabel, Button, TextField,
+  Button, TextField,
   FormControl, InputLabel, Select, MenuItem, Chip,
   OutlinedInput, FormHelperText, CircularProgress,
   Tab, Tabs, Card, CardContent, List, ListItem,
@@ -28,6 +28,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import CloseIcon from '@mui/icons-material/Close';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 // PDF 생성 라이브러리 import
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -40,45 +41,16 @@ interface ExtendedJsPDF extends jsPDF {
   };
 }
 
-// 스텝 제목 변경
-const steps = ['제품/서비스정보', '마케팅 목표', '이벤트 조건', '브랜드 정보'];
-
-// 마케팅 목표 옵션들
-const marketingGoals = [
-  '브랜드/제품 인지도 향상',
-  '신규 고객 유치',
-  '제품 구매 증대',
-  '사용자 참여도 증가',
-  '앱 다운로드/회원가입 증가',
-  '브랜드 충성도 강화',
-  '신제품 출시 홍보',
-  '사용후기/피드백 수집'
-];
-
-// KPI 옵션들
+// 목표 KPI 옵션들
 const kpiOptions = [
-  '팔로워 수 증가',
+  '팔로워 증가',
   '이벤트 참여자 수',
-  '게시물 참여율',
-  '해시태그 사용량',
-  '클릭률',
-  '전환율',
+  '클릭율',
   '웹사이트 트래픽',
   '앱 다운로드 수',
+  '문의 수',
   '회원가입 수',
-  '판매량'
-];
-
-// SNS 플랫폼 옵션
-const platformOptions = [
-  'Instagram',
-  'Facebook',
-  'Twitter',
-  'YouTube',
-  'TikTok',
-  'KakaoTalk',
-  'Naver Blog',
-  'LinkedIn'
+  '판매'
 ];
 
 const ITEM_HEIGHT = 48;
@@ -93,23 +65,6 @@ const MenuProps = {
 };
 
 // 미리 정의된 스타일드 컴포넌트들
-const StepIconRoot = styled('div')<{
-  ownerState: { completed?: boolean; active?: boolean };
-}>(({ theme, ownerState }) => ({
-  color: theme.palette.text.disabled,
-  display: 'flex',
-  height: 22,
-  alignItems: 'center',
-  ...(ownerState.active && {
-    color: theme.palette.primary.main,
-  }),
-  '& .StepIcon-completedIcon': {
-    color: theme.palette.primary.main,
-    zIndex: 1,
-    fontSize: 18,
-  },
-}));
-
 const ListItemStyled = styled(ListItem)(({ theme }) => ({
   padding: theme.spacing(1.5, 0),
   borderBottom: `1px dashed ${theme.palette.divider}`,
@@ -203,53 +158,45 @@ function getStyles(name: string, selectedItems: readonly string[], theme: Theme)
   };
 }
 
+function a11yProps(index: number) {
+  return {
+    id: `tab-${index}`,
+    'aria-controls': `tabpanel-${index}`,
+  };
+}
+
 const IntegratedEventPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [activeStep, setActiveStep] = useState(0);
-  const [skipped, setSkipped] = useState(new Set<number>());
   const [loading, setLoading] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   const [feedback, setFeedback] = useState('');
   const [aiResponse, setAiResponse] = useState<AIEventResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openSnackbar, setOpenSnackbar] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   
-  // Form 상태관리
-  const [formData, setFormData] = useState<EventPlanningInput>({
-    // 1단계: 제품/서비스 정보
-    productName: '',
-    productCategory: '',
-    productFeatures: '',
-    targetAudience: '',
-    
-    // 2단계: 마케팅 목표
-    marketingGoals: [] as string[],
-    kpiMetrics: [] as string[],
-    
-    // 3단계: 이벤트 실행 조건
-    budget: '',
-    platforms: [] as string[],
-    eventDuration: '',
-    prizes: '',
-    
-    // 4단계: 브랜드 정보
-    brandTone: '',
-    additionalInfo: '',
-    referenceFile: null
+  // Form 상태관리 - 새로운 단순화된 구조
+  const [formData, setFormData] = useState({
+    productCategory: '',           // 제품/서비스 카테고리
+    productName: '',              // 제품/서비스 이름
+    productFeatures: '',          // 특징 및 핵심 가치
+    kpiMetrics: [] as string[],   // 목표 KPI
+    targetAudience: '',           // 타깃 속성
+    budget: '',                   // 예산
+    startDate: '',                // 이벤트 시작일
+    endDate: '',                  // 이벤트 종료일
   });
 
   // 이벤트 생성 함수
   const handleGenerateEvent = async () => {
     const hasRequiredFields = 
-      formData.productName && 
       formData.productCategory && 
+      formData.productName && 
       formData.productFeatures && 
-      formData.marketingGoals.length > 0 &&
-      formData.platforms.length > 0;
+      formData.kpiMetrics.length > 0 &&
+      formData.targetAudience &&
+      formData.budget;
     
     if (hasRequiredFields) {
       setLoading(true);
@@ -258,11 +205,24 @@ const IntegratedEventPage: React.FC = () => {
       try {
         console.log("이벤트 생성 요청 시작");
         
-        // 파일이 있으면 파일명을 참고링크 대신 전달
-        let requestData = { ...formData };
-        if (formData.referenceFile) {
-          requestData.referenceLinks = `[첨부파일] ${formData.referenceFile.name}`;
-        }
+        // 새로운 형식에 맞게 데이터 변환
+        const requestData: EventPlanningInput = {
+          productName: formData.productName,
+          productCategory: formData.productCategory,
+          productFeatures: formData.productFeatures,
+          targetAudience: formData.targetAudience,
+          marketingGoals: ['브랜드/제품 인지도 향상'], // 기본값 설정
+          kpiMetrics: formData.kpiMetrics,
+          budget: formData.budget,
+          platforms: ['Instagram', 'Facebook'], // 기본값 설정
+          eventDuration: formData.startDate && formData.endDate 
+            ? `${formData.startDate}부터 ${formData.endDate}까지` 
+            : '2주',
+          prizes: '',
+          brandTone: '',
+          additionalInfo: '',
+          referenceFile: null
+        };
         
         const response = await generateEventPlan(requestData);
         setAiResponse(response);
@@ -280,56 +240,16 @@ const IntegratedEventPage: React.FC = () => {
     }
   };
 
-  const isStepOptional = (step: number) => {
-    return step === 3;
-  };
-
-  const isStepSkipped = (step: number) => {
-    return skipped.has(step);
-  };
-
-  const handleNext = () => {
-    let newSkipped = skipped;
-    if (isStepSkipped(activeStep)) {
-      newSkipped = new Set(newSkipped.values());
-      newSkipped.delete(activeStep);
-    }
-
-    setActiveStep((prevActiveStep) => prevActiveStep + 1);
-    setSkipped(newSkipped);
-  };
-
-  const handleBack = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-  };
-
-  const handleSkip = () => {
-    if (!isStepOptional(activeStep)) {
-      throw new Error("단계를 건너뛸 수 없습니다.");
-    }
-
-    setActiveStep((prevActiveStep) => prevActiveStep + 1);
-    setSkipped((prevSkipped) => {
-      const newSkipped = new Set(prevSkipped.values());
-      newSkipped.add(activeStep);
-      return newSkipped;
-    });
-  };
-
-  const handleReset = () => {
-    setActiveStep(0);
-  };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleSelectChange = (event: SelectChangeEvent<string[]>, fieldName: string) => {
+  const handleSelectChange = (event: SelectChangeEvent<string[]>) => {
     const { value } = event.target;
     setFormData({
       ...formData,
-      [fieldName]: typeof value === 'string' ? value.split(',') : value,
+      kpiMetrics: typeof value === 'string' ? value.split(',') : value,
     });
   };
 
@@ -347,7 +267,20 @@ const IntegratedEventPage: React.FC = () => {
       setError(null);
       
       try {
-        const refinedResponse = await refineEventPlan(aiResponse, feedback);
+        // 원본 입력 데이터 구성
+        const originalInput: EventPlanningInput = {
+          productName: formData.productName,
+          productCategory: formData.productCategory,
+          productFeatures: formData.productFeatures,
+          targetAudience: formData.targetAudience,
+          marketingGoals: ['브랜드/제품 인지도 향상'], // 기본값
+          kpiMetrics: formData.kpiMetrics,
+          budget: formData.budget,
+          platforms: ['Instagram'], // 기본값
+          eventDuration: `${formData.startDate}부터 ${formData.endDate}까지`,
+        };
+        
+        const refinedResponse = await refineEventPlan(aiResponse, feedback, originalInput);
         setAiResponse(refinedResponse);
         setFeedback('');
         setOpenSnackbar(true); // 성공 메시지 표시
@@ -397,406 +330,171 @@ const IntegratedEventPage: React.FC = () => {
       heightLeft -= pageHeight;
       
       // 필요한 경우 여러 페이지로 분할
-      while (heightLeft > 0) {
+      while (heightLeft >= 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
       
-      // 파일 저장
-      const fileName = `${aiResponse.eventTitle.replace(/\s+/g, '_')}_이벤트기획안.pdf`;
-      pdf.save(fileName);
+      // PDF 다운로드
+      pdf.save(`SNS_이벤트_기획안_${new Date().toISOString().split('T')[0]}.pdf`);
       
-      setOpenSnackbar(true);
-      setError(null);
-    } catch (err) {
-      console.error('PDF 생성 중 오류 발생:', err);
-      setError('PDF 저장 중 오류가 발생했습니다. 자세한 내용은 개발자 도구 콘솔을 확인하세요.');
+    } catch (error) {
+      console.error('PDF 생성 중 오류 발생:', error);
+      setError('PDF 생성 중 오류가 발생했습니다.');
       setOpenSnackbar(true);
     } finally {
       setLoading(false);
     }
   };
 
-  // Snackbar 닫기 핸들러
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false);
+    setError(null);
   };
 
-  // 파일 업로드 처리 핸들러
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] || null;
-    if (file) {
-      // 파일 유형 검증 (txt, docx, pdf, jpg, png만 허용)
-      const validTypes = ['text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-                          'application/pdf', 'image/jpeg', 'image/png'];
-      if (!validTypes.includes(file.type)) {
-        setError('지원되지 않는 파일 형식입니다. txt, docx, pdf, jpg, png 파일만 업로드 가능합니다.');
-        setOpenSnackbar(true);
-        return;
-      }
-      
-      // 파일 크기 제한 (10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        setError('파일 크기가 너무 큽니다. 10MB 이하의 파일만 업로드 가능합니다.');
-        setOpenSnackbar(true);
-        return;
-      }
-      
-      setUploadedFile(file);
-      setFormData({ ...formData, referenceFile: file });
-    }
-  };
-
-  // 업로드된 파일 삭제
-  const handleRemoveFile = () => {
-    setUploadedFile(null);
-    setFormData({ ...formData, referenceFile: null });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // 파일 선택 버튼 클릭 핸들러
-  const handleFileButtonClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  // Step에 따른 폼 내용 렌더링
-  const getStepContent = (step: number) => {
-    switch (step) {
-      case 0:
-        return (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              제품/서비스정보
-            </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  id="productName"
-                  name="productName"
-                  label="제품/서비스 이름"
-                  fullWidth
-                  value={formData.productName}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  id="productCategory"
-                  name="productCategory"
-                  label="카테고리"
-                  fullWidth
-                  value={formData.productCategory}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  id="productFeatures"
-                  name="productFeatures"
-                  label="제품/서비스 특징 및 장점"
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={formData.productFeatures}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  id="targetAudience"
-                  name="targetAudience"
-                  label="타겟 고객층 (연령, 성별, 관심사 등)"
-                  fullWidth
-                  value={formData.targetAudience}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-            </Grid>
-          </Box>
-        );
-      case 1:
-        return (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              마케팅 목표
-            </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <FormControl fullWidth required>
-                  <InputLabel id="marketing-goals-label">마케팅 목표</InputLabel>
-                  <Select
-                    labelId="marketing-goals-label"
-                    id="marketingGoals"
-                    multiple
-                    value={formData.marketingGoals}
-                    onChange={(e) => handleSelectChange(e, 'marketingGoals')}
-                    input={<OutlinedInput id="select-marketing-goals" label="마케팅 목표" />}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => (
-                          <Chip key={value} label={value} />
-                        ))}
-                      </Box>
-                    )}
-                    MenuProps={MenuProps}
-                  >
-                    {marketingGoals.map((goal) => (
-                      <MenuItem
-                        key={goal}
-                        value={goal}
-                        style={getStyles(goal, formData.marketingGoals, theme)}
-                      >
-                        {goal}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <FormHelperText>이벤트를 통해 달성하고자 하는 목표를 선택하세요</FormHelperText>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth required>
-                  <InputLabel id="kpi-metrics-label">KPI 지표</InputLabel>
-                  <Select
-                    labelId="kpi-metrics-label"
-                    id="kpiMetrics"
-                    multiple
-                    value={formData.kpiMetrics}
-                    onChange={(e) => handleSelectChange(e, 'kpiMetrics')}
-                    input={<OutlinedInput id="select-kpi" label="KPI 지표" />}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => (
-                          <Chip key={value} label={value} />
-                        ))}
-                      </Box>
-                    )}
-                    MenuProps={MenuProps}
-                  >
-                    {kpiOptions.map((kpi) => (
-                      <MenuItem
-                        key={kpi}
-                        value={kpi}
-                        style={getStyles(kpi, formData.kpiMetrics, theme)}
-                      >
-                        {kpi}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <FormHelperText>이벤트 성과를 측정할 지표를 선택하세요</FormHelperText>
-                </FormControl>
-              </Grid>
-            </Grid>
-          </Box>
-        );
-      case 2:
-        return (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              이벤트 조건
-            </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  id="budget"
-                  name="budget"
-                  label="예산 (원)"
-                  fullWidth
-                  type="number"
-                  value={formData.budget}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  id="eventDuration"
-                  name="eventDuration"
-                  label="이벤트 기간 (예: 2주, 1개월)"
-                  fullWidth
-                  value={formData.eventDuration}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth required>
-                  <InputLabel id="platforms-label">SNS 플랫폼</InputLabel>
-                  <Select
-                    labelId="platforms-label"
-                    id="platforms"
-                    multiple
-                    value={formData.platforms}
-                    onChange={(e) => handleSelectChange(e, 'platforms')}
-                    input={<OutlinedInput id="select-platforms" label="SNS 플랫폼" />}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => (
-                          <Chip key={value} label={value} />
-                        ))}
-                      </Box>
-                    )}
-                    MenuProps={MenuProps}
-                  >
-                    {platformOptions.map((platform) => (
-                      <MenuItem
-                        key={platform}
-                        value={platform}
-                        style={getStyles(platform, formData.platforms, theme)}
-                      >
-                        {platform}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <FormHelperText>이벤트를 진행할 SNS 플랫폼을 선택하세요</FormHelperText>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  id="prizes"
-                  name="prizes"
-                  label="경품 구성 (선택사항)"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={formData.prizes}
-                  onChange={handleInputChange}
-                  helperText="경품이 있는 경우 상품 및 수량을 적어주세요"
-                />
-              </Grid>
-            </Grid>
-          </Box>
-        );
-      case 3:
-        return (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              브랜드 정보
-            </Typography>
-            <Typography variant="caption" color="text.secondary" paragraph>
-              선택사항이지만, 입력하시면 더 정확한 제안을 받을 수 있습니다.
-            </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <TextField
-                  id="brandTone"
-                  name="brandTone"
-                  label="브랜드 톤앤매너"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={formData.brandTone}
-                  onChange={handleInputChange}
-                  helperText="브랜드의 성격, 커뮤니케이션 스타일 등을 자유롭게 설명해 주세요"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  id="additionalInfo"
-                  name="additionalInfo"
-                  label="추가 정보"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={formData.additionalInfo}
-                  onChange={handleInputChange}
-                  helperText="이벤트 기획에 참고할만한 추가 정보가 있다면 입력해 주세요"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                {renderFileUpload()}
-              </Grid>
-            </Grid>
-          </Box>
-        );
-      default:
-        return '알 수 없는 단계입니다';
-    }
-  };
-
-  // 참고링크 입력 필드를 파일 첨부 기능으로 교체
-  const renderFileUpload = () => {
+  // 단순화된 폼 컨텐츠 렌더링
+  const renderFormContent = () => {
     return (
       <Box>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          참고 자료 (txt, docx, pdf, jpg, png 형식)
-        </Typography>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".txt,.docx,.pdf,.jpg,.jpeg,.png"
-          style={{ display: 'none' }}
-          onChange={handleFileUpload}
-        />
-        {uploadedFile ? (
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            border: '1px solid', 
-            borderColor: 'divider',
-            borderRadius: 1,
-            p: 1.5,
-            backgroundColor: alpha(theme.palette.primary.light, 0.05)
-          }}>
-            <AttachFileIcon color="primary" sx={{ mr: 1 }} />
-            <Typography variant="body2" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {uploadedFile.name}
-            </Typography>
-            <IconButton size="small" onClick={handleRemoveFile}>
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        ) : (
-          <Button
-            variant="outlined"
-            startIcon={<FileUploadIcon />}
-            onClick={handleFileButtonClick}
-            fullWidth
-            sx={{ 
-              borderStyle: 'dashed', 
-              py: 1.5,
-              borderColor: theme.palette.divider,
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                backgroundColor: alpha(theme.palette.primary.light, 0.05)
-              }
-            }}
-          >
-            파일 선택
-          </Button>
-        )}
-        <FormHelperText>
-          참고할 자료 파일을 첨부해주세요
-        </FormHelperText>
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <TextField
+              required
+              id="productCategory"
+              name="productCategory"
+              label="제품/서비스 카테고리"
+              placeholder="제품/서비스 카테고리를 입력해 주세요."
+              fullWidth
+              value={formData.productCategory}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              required
+              id="productName"
+              name="productName"
+              label="제품/서비스 이름"
+              placeholder="제품/서비스 이름을 입력해 주세요."
+              fullWidth
+              value={formData.productName}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              required
+              id="productFeatures"
+              name="productFeatures"
+              label="특징 및 핵심 가치"
+              placeholder="제품/서비스의 특징 및 핵심 가치를 입력해 주세요."
+              fullWidth
+              multiline
+              rows={3}
+              value={formData.productFeatures}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <FormControl fullWidth required>
+              <InputLabel id="kpi-metrics-label">목표 KPI</InputLabel>
+              <Select
+                labelId="kpi-metrics-label"
+                id="kpiMetrics"
+                multiple
+                value={formData.kpiMetrics}
+                onChange={handleSelectChange}
+                input={<OutlinedInput id="select-kpi" label="목표 KPI" />}
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selected.map((value) => (
+                      <Chip key={value} label={value} />
+                    ))}
+                  </Box>
+                )}
+                MenuProps={MenuProps}
+              >
+                {kpiOptions.map((kpi) => (
+                  <MenuItem
+                    key={kpi}
+                    value={kpi}
+                    style={getStyles(kpi, formData.kpiMetrics, theme)}
+                  >
+                    {kpi}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>항목 선택</FormHelperText>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              required
+              id="targetAudience"
+              name="targetAudience"
+              label="타깃 속성"
+              placeholder="도달하고자 하는 소비자의 특징을 입력해 주세요."
+              fullWidth
+              value={formData.targetAudience}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              required
+              id="budget"
+              name="budget"
+              label="예산"
+              fullWidth
+              value={formData.budget}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              id="startDate"
+              name="startDate"
+              label="이벤트 시작일"
+              type="date"
+              fullWidth
+              InputLabelProps={{
+                shrink: true,
+              }}
+              value={formData.startDate}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              id="endDate"
+              name="endDate"
+              label="이벤트 종료일"
+              type="date"
+              fullWidth
+              InputLabelProps={{
+                shrink: true,
+              }}
+              value={formData.endDate}
+              onChange={handleInputChange}
+            />
+          </Grid>
+        </Grid>
       </Box>
     );
   };
 
-  // 결과 보기 렌더링 개선
   const renderResults = () => {
     if (loading) {
       return (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          py: 8,
-          minHeight: '500px'
-        }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8 }}>
           <CircularProgress size={60} thickness={4} />
-          <Typography variant="h6" sx={{ mt: 4, fontWeight: 500 }}>
-            AI가 이벤트 기획안을 생성하고 있습니다...
+          <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary' }}>
+            AI가 이벤트 기획안을 생성 중입니다...
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            입력하신 정보를 분석 중입니다
+          <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+            잠시만 기다려 주세요
           </Typography>
         </Box>
       );
@@ -804,196 +502,89 @@ const IntegratedEventPage: React.FC = () => {
 
     if (!aiResponse) {
       return (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          height: '100%', 
-          py: 8,
-          minHeight: '500px'
-        }}>
-          <Box sx={{ 
-            width: 80, 
-            height: 80, 
-            borderRadius: '50%', 
-            backgroundColor: alpha(theme.palette.primary.main, 0.08),
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            mb: 3
-          }}>
-            <LightbulbIcon color="primary" sx={{ fontSize: 40 }} />
-          </Box>
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            왼쪽에 정보를 입력하시면
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8 }}>
+          <ErrorOutlineIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" sx={{ mb: 1, color: 'text.secondary' }}>
+            아직 생성된 기획안이 없습니다
           </Typography>
-          <Typography variant="h5" color="primary" gutterBottom fontWeight={600}>
-            AI가 이벤트 기획안을 제안해 드립니다
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: '400px', textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary" align="center" sx={{ maxWidth: '80%' }}>
             제품 정보, 마케팅 목표, 타겟층 등의 정보를 입력할수록 더 정교한 제안을 받을 수 있습니다
           </Typography>
         </Box>
       );
     }
 
-    return (
-      <Box ref={resultRef}>
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          mb: 3,
-          flexDirection: { xs: 'column', sm: 'row' },
-          gap: { xs: 2, sm: 0 }
-        }}>
-          <Box>
-            <Typography variant="h5" fontWeight={600} color="primary">
-              이벤트 기획 제안
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              AI가 생성한 맞춤형 이벤트 기획안입니다
-            </Typography>
-          </Box>
-          <Button 
-            variant="contained"
-            onClick={handleSaveAsPdf}
-            size="medium"
-            startIcon={<DownloadIcon />}
-            sx={{ borderRadius: 20, px: 2 }}
-          >
-            PDF 저장
-          </Button>
-        </Box>
-        
-        <Divider sx={{ mb: 4 }} />
-        
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h5" gutterBottom color="primary" fontWeight={600}>
-            {aiResponse.eventTitle}
+    // 새로운 JSON 구조에서 첫 번째 이벤트 가져오기
+    console.log("AI 응답 전체:", aiResponse);
+    const eventKeys = Object.keys(aiResponse);
+    console.log("이벤트 키들:", eventKeys);
+    const firstEventKey = eventKeys[0];
+    const eventData = aiResponse[firstEventKey];
+    console.log("첫 번째 이벤트 데이터:", eventData);
+
+    if (!eventData) {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8 }}>
+          <ErrorOutlineIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" sx={{ mb: 1, color: 'text.secondary' }}>
+            이벤트 데이터를 불러올 수 없습니다
           </Typography>
-          <Paper 
-            variant="outlined" 
-            sx={{ 
-              p: 3, 
-              borderRadius: 2,
-              borderColor: alpha(theme.palette.primary.main, 0.2),
-              position: 'relative',
-              overflow: 'hidden',
-              mb: 4,
-              '&::before': {
-                content: '""',
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: '4px',
-                backgroundColor: theme.palette.primary.main
+          <Typography variant="body2" color="text.secondary">
+            디버그: 키={eventKeys.join(', ')}, 데이터={JSON.stringify(eventData)}
+          </Typography>
+        </Box>
+      );
+    }
+
+    return (
+      <Box ref={resultRef} sx={{ mb: 4 }}>
+        {/* 제목 및 기본 정보 */}
+        <Box sx={{ 
+          mb: 4, 
+          p: 3, 
+          borderRadius: 2, 
+          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.secondary.main, 0.1)})`
+        }}>
+          <Typography variant="h4" gutterBottom fontWeight={700} color="primary">
+            {formData.productName} 이벤트 기획안
+          </Typography>
+          <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+            📅 {eventData.startDate} ~ {eventData.endDate}
+          </Typography>
+          <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+            {eventData.eventConcept}
+          </Typography>
+        </Box>
+
+        {/* 탭 네비게이션 */}
+        <Box sx={{ mb: 3 }}>
+          <Tabs 
+            value={tabValue} 
+            onChange={handleTabChange} 
+            variant={isMobile ? "scrollable" : "fullWidth"}
+            scrollButtons="auto"
+            sx={{
+              '& .MuiTab-root': { 
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                minHeight: 48,
               }
             }}
           >
-            <Box sx={{ display: 'flex', mb: 2 }}>
-              <FormatQuoteIcon sx={{ fontSize: 40, color: alpha(theme.palette.primary.main, 0.3), mr: 1 }} />
-            </Box>
-            <Typography variant="body1" paragraph sx={{ fontStyle: 'italic', pl: 1 }}>
-              {aiResponse.eventConcept}
-            </Typography>
-          </Paper>
-          
-          <Grid container spacing={3} sx={{ mt: 2 }}>
-            <Grid item xs={12} sm={4}>
-              <ResultCard>
-                <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 4 }}>
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: alpha(theme.palette.primary.main, 0.1), 
-                      color: theme.palette.primary.main,
-                      width: 56,
-                      height: 56,
-                      mb: 2
-                    }}
-                  >
-                    <CampaignIcon fontSize="large" />
-                  </Avatar>
-                  <Typography variant="subtitle1" gutterBottom fontWeight={600}>이벤트 유형</Typography>
-                  <Typography variant="body2" align="center">{aiResponse.eventType}</Typography>
-                </CardContent>
-              </ResultCard>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <ResultCard>
-                <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 4 }}>
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: alpha(theme.palette.primary.main, 0.1), 
-                      color: theme.palette.primary.main,
-                      width: 56,
-                      height: 56,
-                      mb: 2
-                    }}
-                  >
-                    <CalendarMonthIcon fontSize="large" />
-                  </Avatar>
-                  <Typography variant="subtitle1" gutterBottom fontWeight={600}>진행 기간</Typography>
-                  <Typography variant="body2" align="center">{aiResponse.duration}</Typography>
-                </CardContent>
-              </ResultCard>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <ResultCard>
-                <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 4 }}>
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: alpha(theme.palette.primary.main, 0.1), 
-                      color: theme.palette.primary.main,
-                      width: 56,
-                      height: 56,
-                      mb: 2
-                    }}
-                  >
-                    <GroupIcon fontSize="large" />
-                  </Avatar>
-                  <Typography variant="subtitle1" gutterBottom fontWeight={600}>대상 타겟</Typography>
-                  <Typography variant="body2" align="center">{aiResponse.targetAudience}</Typography>
-                </CardContent>
-              </ResultCard>
-            </Grid>
-          </Grid>
+            <Tab label="실행 계획" icon={<AutoGraphIcon />} iconPosition="start" {...a11yProps(0)} />
+            <Tab label="콘텐츠 전략" icon={<CampaignIcon />} iconPosition="start" {...a11yProps(1)} />
+            <Tab label="목표 & 성과" icon={<AnalyticsIcon />} iconPosition="start" {...a11yProps(2)} />
+            <Tab label="경품 & 예산" icon={<EmojiEventsIcon />} iconPosition="start" {...a11yProps(3)} />
+          </Tabs>
         </Box>
-        
-        <Box sx={{ width: '100%', mt: 4 }}>
-          <Box sx={{ 
-            borderBottom: 1, 
-            borderColor: 'divider',
-            '& .MuiTab-root': {
-              minHeight: 'auto',
-              py: 1.5,
-              fontWeight: 500,
-              textTransform: 'none',
-              fontSize: '0.95rem'
-            }
-          }}>
-            <Tabs 
-              value={tabValue} 
-              onChange={handleTabChange}
-              variant="scrollable"
-              scrollButtons="auto"
-              sx={{ minHeight: 'auto' }}
-              textColor="primary"
-              indicatorColor="primary"
-            >
-              <Tab label="실행 계획" sx={{ minHeight: 'auto', py: 1 }} />
-              <Tab label="예상 성과" sx={{ minHeight: 'auto', py: 1 }} />
-              <Tab label="경품 구성" sx={{ minHeight: 'auto', py: 1 }} />
-              <Tab label="포스팅 예시" sx={{ minHeight: 'auto', py: 1 }} />
-            </Tabs>
-          </Box>
-          
+
+        {/* 탭 내용 */}
+        <Box sx={{ minHeight: 400 }}>
+          {/* 실행 계획 탭 */}
           <TabPanel value={tabValue} index={0}>
             <Typography variant="h6" gutterBottom fontWeight={600} color="primary">세부 실행 계획</Typography>
             <List>
-              {aiResponse.executionSteps.map((step: string, index: number) => (
+              {eventData.contentMechanics.process.map((step: string, index: number) => (
                 <ListItemStyled key={index}>
                   <ListItemIcon sx={{ minWidth: 36 }}>
                     <Avatar sx={{ 
@@ -1014,73 +605,154 @@ const IntegratedEventPage: React.FC = () => {
                 </ListItemStyled>
               ))}
             </List>
+          </TabPanel>
+          
+          {/* 콘텐츠 전략 탭 */}
+          <TabPanel value={tabValue} index={1}>
+            <Typography variant="h6" gutterBottom fontWeight={600} color="primary">콘텐츠 포맷별 전략</Typography>
             
-            <Typography variant="subtitle1" gutterBottom sx={{ mt: 4, fontWeight: 600, color: 'primary.main' }}>추천 해시태그</Typography>
-            <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
-              {aiResponse.hashtags.map((tag: string, index: number) => (
-                <Chip 
-                  key={index} 
-                  label={tag} 
-                  color="primary" 
-                  variant="outlined" 
-                  size="medium"
-                  icon={<LocalOfferIcon />} 
-                />
-              ))}
+            {/* 피드 포스트 */}
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>📸 피드 포스트</Typography>
+              {eventData.contentMechanics.postFormats.feed.carouselSlides && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" fontWeight="medium" gutterBottom>캐러셀 슬라이드:</Typography>
+                  {eventData.contentMechanics.postFormats.feed.carouselSlides.map((slide: any, index: number) => (
+                    <Typography key={index} variant="body2" sx={{ ml: 2, mb: 1 }}>
+                      • 슬라이드 {slide.slide}: {slide.concept}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+              {eventData.contentMechanics.postFormats.feed.caption && (
+                <Paper sx={{ p: 2, mb: 2, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
+                  <Typography variant="body2" fontWeight="medium" gutterBottom>캡션:</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                    {eventData.contentMechanics.postFormats.feed.caption}
+                  </Typography>
+                </Paper>
+              )}
+              <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+                {eventData.contentMechanics.postFormats.feed.hashtags.map((tag: string, index: number) => (
+                  <Chip key={index} label={tag} color="primary" variant="outlined" size="small" />
+                ))}
+              </Box>
+            </Box>
+
+            {/* 릴스 */}
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'secondary.main' }}>🎬 릴스</Typography>
+              <List disablePadding>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="재생 시간"
+                    secondary={eventData.contentMechanics.postFormats.reels.duration}
+                    primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
+                  />
+                </ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="첫 3초 훅"
+                    secondary={eventData.contentMechanics.postFormats.reels.hookFirst3s}
+                    primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
+                  />
+                </ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="메인 장면 구성"
+                    secondary={eventData.contentMechanics.postFormats.reels.mainScenes}
+                    primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
+                  />
+                </ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemText 
+                    primary="음악 선정"
+                    secondary={eventData.contentMechanics.postFormats.reels.audio}
+                    primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
+                  />
+                </ListItem>
+              </List>
+            </Box>
+
+            {/* 스토리 */}
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'warning.main' }}>📱 스토리</Typography>
+              <List disablePadding>
+                {eventData.contentMechanics.postFormats.stories.frame1 && (
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemText 
+                      primary={`프레임 1 (${eventData.contentMechanics.postFormats.stories.frame1.type})`}
+                      secondary={eventData.contentMechanics.postFormats.stories.frame1.text}
+                      primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
+                    />
+                  </ListItem>
+                )}
+                {eventData.contentMechanics.postFormats.stories.frame2 && (
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemText 
+                      primary={`프레임 2 (${eventData.contentMechanics.postFormats.stories.frame2.type})`}
+                      secondary={eventData.contentMechanics.postFormats.stories.frame2.text}
+                      primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
+                    />
+                  </ListItem>
+                )}
+                {eventData.contentMechanics.postFormats.stories.frame3 && (
+                  <ListItem sx={{ px: 0 }}>
+                    <ListItemText 
+                      primary={`프레임 3 (${eventData.contentMechanics.postFormats.stories.frame3.type})`}
+                      secondary={eventData.contentMechanics.postFormats.stories.frame3.text}
+                      primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
+                    />
+                  </ListItem>
+                )}
+              </List>
             </Box>
           </TabPanel>
-          
-          <TabPanel value={tabValue} index={1}>
-            <Typography variant="h6" gutterBottom fontWeight={600} color="primary">예상 성과</Typography>
-            <List>
-              {aiResponse.expectedResults.map((result: string, index: number) => (
-                <ListItemStyled key={index}>
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    <AnalyticsIcon color="primary" fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={result} 
-                    primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
-                  />
-                </ListItemStyled>
-              ))}
-            </List>
-          </TabPanel>
-          
+
+          {/* 목표 & 성과 탭 */}
           <TabPanel value={tabValue} index={2}>
-            <Typography variant="h6" gutterBottom fontWeight={600} color="primary">제안 경품 구성</Typography>
-            <List>
-              {aiResponse.suggestedPrizes.map((prize: string, index: number) => (
-                <ListItemStyled key={index}>
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    <EmojiEventsIcon color="primary" fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={prize} 
-                    primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
-                  />
-                </ListItemStyled>
-              ))}
-            </List>
+            <Typography variant="h6" gutterBottom fontWeight={600} color="primary">목표 & 성과 지표</Typography>
+            
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>🎯 이벤트 목표</Typography>
+              <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                  {eventData.goal}
+                </Typography>
+              </Paper>
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'secondary.main' }}>📊 성과 측정 방식</Typography>
+              <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.secondary.main, 0.03) }}>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                  {eventData.performanceMetric}
+                </Typography>
+              </Paper>
+            </Box>
           </TabPanel>
-          
+
+          {/* 경품 & 예산 탭 */}
           <TabPanel value={tabValue} index={3}>
-            <Typography variant="h6" gutterBottom fontWeight={600} color="primary">SNS 포스팅 예시</Typography>
-            <Paper 
-              sx={{ 
-                p: 3, 
-                backgroundColor: alpha(theme.palette.primary.main, 0.03),
-                borderRadius: 2,
-                position: 'relative',
-                overflow: 'hidden',
-                whiteSpace: 'pre-line',
-                borderLeft: `4px solid ${theme.palette.primary.main}`
-              }}
-            >
-              <Typography variant="body1" sx={{ whiteSpace: 'pre-line', fontFamily: 'inherit' }}>
-                {aiResponse.samplePost}
-              </Typography>
-            </Paper>
+            <Typography variant="h6" gutterBottom fontWeight={600} color="primary">경품 구성 & 예산</Typography>
+            
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'warning.main' }}>🏆 경품 구성</Typography>
+              <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.warning.main, 0.03) }}>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                  {eventData.rewards}
+                </Typography>
+              </Paper>
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'success.main' }}>💰 예산</Typography>
+              <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.03) }}>
+                <Typography variant="h5" fontWeight="bold" color="success.main">
+                  {parseInt(eventData.budget).toLocaleString()}만원
+                </Typography>
+              </Paper>
+            </Box>
           </TabPanel>
         </Box>
         
@@ -1143,136 +815,11 @@ const IntegratedEventPage: React.FC = () => {
               </Typography>
             </Box>
             
-            <Box sx={{ mb: 4, px: 2 }}>
-              <Stepper 
-                activeStep={activeStep} 
-                sx={{ 
-                  mb: 4,
-                  '& .MuiStepConnector-line': {
-                    minHeight: 5,
-                    marginTop: '15px'
-                  },
-                  '& .MuiStepLabel-labelContainer': {
-                    mt: 1
-                  },
-                  '& .MuiStepLabel-label': {
-                    fontSize: '0.875rem',
-                    textAlign: 'center'
-                  },
-                  '& .MuiStepLabel-label.Mui-active': {
-                    fontWeight: 600,
-                    color: theme.palette.primary.main
-                  },
-                  '& .MuiStep-root': {
-                    padding: '0 8px'
-                  }
-                }}
-              >
-                {steps.map((label, index) => {
-                  const stepProps: { completed?: boolean } = {};
-                  
-                  if (isStepSkipped(index)) {
-                    stepProps.completed = false;
-                  }
-                  
-                  return (
-                    <Step key={label} {...stepProps}>
-                      <StepLabel 
-                        StepIconComponent={() => {
-                          const isCompleted = activeStep > index;
-                          const isActive = activeStep === index;
-                          
-                          return (
-                            <Avatar 
-                              sx={{ 
-                                width: 36, 
-                                height: 36, 
-                                bgcolor: isCompleted 
-                                  ? theme.palette.success.main 
-                                  : isActive
-                                    ? theme.palette.primary.main
-                                    : theme.palette.grey[300],
-                                color: 'white',
-                                fontSize: '1rem',
-                                fontWeight: 600,
-                                mx: 'auto',
-                                boxShadow: isActive ? '0px 4px 8px rgba(0, 0, 0, 0.2)' : 'none',
-                                border: isActive ? `2px solid ${theme.palette.primary.light}` : 'none',
-                                transition: 'all 0.3s ease'
-                              }}
-                            >
-                              {isCompleted ? (
-                                <CheckCircleIcon fontSize="small" />
-                              ) : (
-                                index + 1
-                              )}
-                            </Avatar>
-                          );
-                        }}
-                        sx={{
-                          flexDirection: 'column',
-                          '& .MuiStepLabel-iconContainer': {
-                            padding: 0,
-                            mb: 0.5
-                          },
-                          '& .MuiStepLabel-labelContainer': {
-                            textAlign: 'center',
-                            width: '100%'
-                          }
-                        }}
-                      >
-                        {label}
-                        {isStepOptional(index) && (
-                          <Typography variant="caption" display="block" color="text.secondary">
-                            선택사항
-                          </Typography>
-                        )}
-                      </StepLabel>
-                    </Step>
-                  );
-                })}
-              </Stepper>
-            </Box>
-            
             <Box sx={{ mb: 4, minHeight: '300px' }}>
-              {getStepContent(activeStep)}
+              {renderFormContent()}
             </Box>
             
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
-              <Button
-                disabled={activeStep === 0}
-                onClick={handleBack}
-                variant="outlined"
-                sx={{ borderRadius: '20px', px: 2 }}
-              >
-                이전
-              </Button>
-              <Box>
-                {isStepOptional(activeStep) && activeStep !== steps.length - 1 && (
-                  <Button
-                    color="inherit"
-                    onClick={handleSkip}
-                    sx={{ mr: 1, borderRadius: '20px', px: 2 }}
-                  >
-                    건너뛰기
-                  </Button>
-                )}
-                <Button 
-                  variant="contained" 
-                  onClick={handleNext}
-                  disabled={activeStep === steps.length - 1}
-                  sx={{ 
-                    borderRadius: '20px', 
-                    px: 3
-                  }}
-                >
-                  다음
-                </Button>
-              </Box>
-            </Box>
-            
-            {/* 이벤트 생성 버튼 추가 */}
-            <Box sx={{ mt: 4, textAlign: 'center' }}>
+            <Box sx={{ textAlign: 'center', mt: 3 }}>
               <Button
                 variant="contained"
                 color="primary"

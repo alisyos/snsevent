@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
@@ -8,8 +8,12 @@ import Container from '@mui/material/Container';
 import Button from '@mui/material/Button';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import HomeIcon from '@mui/icons-material/Home';
 
 const Header: React.FC = () => {
+  const location = useLocation();
+  const isAdminPage = location.pathname === '/admin';
+
   return (
     <AppBar 
       position="static" 
@@ -37,22 +41,41 @@ const Header: React.FC = () => {
             </RouterLink>
           </Typography>
           
-          <Button 
-            component={RouterLink} 
-            to="/admin" 
-            color="inherit" 
-            startIcon={<AdminPanelSettingsIcon />}
-            sx={{ 
-              backgroundColor: 'rgba(255, 255, 255, 0.1)', 
-              '&:hover': { 
-                backgroundColor: 'rgba(255, 255, 255, 0.2)' 
-              },
-              borderRadius: 2,
-              px: 2
-            }}
-          >
-            관리자
-          </Button>
+          {isAdminPage ? (
+            <Button 
+              component={RouterLink} 
+              to="/" 
+              color="inherit" 
+              startIcon={<HomeIcon />}
+              sx={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+                '&:hover': { 
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)' 
+                },
+                borderRadius: 2,
+                px: 2
+              }}
+            >
+              사용자 페이지
+            </Button>
+          ) : (
+            <Button 
+              component={RouterLink} 
+              to="/admin" 
+              color="inherit" 
+              startIcon={<AdminPanelSettingsIcon />}
+              sx={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+                '&:hover': { 
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)' 
+                },
+                borderRadius: 2,
+                px: 2
+              }}
+            >
+              관리자
+            </Button>
+          )}
         </Toolbar>
       </Container>
     </AppBar>
