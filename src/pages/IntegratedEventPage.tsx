@@ -792,14 +792,6 @@ const IntegratedEventPage: React.FC = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
-      <Box sx={{ mb: 4, textAlign: 'center' }}>
-        <Typography variant="h4" gutterBottom fontWeight={600} color="primary">
-          AI 기반 SNS 이벤트 기획
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          정보를 입력하고 실시간으로 AI가 제안하는 맞춤형 이벤트 기획안을 확인하세요
-        </Typography>
-      </Box>
       
       <Grid container spacing={4}>
         {/* 좌측: 입력 폼 */}
